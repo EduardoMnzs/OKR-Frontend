@@ -8,50 +8,48 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, X, Target, Edit3 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-interface KeyResult {
-  id: string;
-  title: string;
-  progress: number;
-  target: number;
-  current: number;
-  unit: string;
-}
+// REMOVA AS INTERFACES LOCAIS E IMPORTE AS INTERFACES CENTRALIZADAS
+import type { OKR, KeyResult } from "@/types/okr.d.ts";
+import { updateOKR, updateKeyResult as apiUpdateKeyResult, createKeyResult, deleteKeyResult } from "@/services/okrService";
+import type { OKRPayload, KeyResultPayload } from "@/services/okrService";
 
-interface OKRData {
-  id: string;
+// Interface do formulário para os campos principais
+interface EditOKRFormData {
   title: string;
   description: string;
-  owner: string;
-  deadline: string;
-  status: "on-track" | "at-risk" | "behind" | "completed";
-  progress: number;
-  keyResults: KeyResult[];
-  lastUpdate: string;
-  commentsCount: number;
+  responsible: string;
+  due_date: string;
 }
 
-interface EditOKRModalProps {
+export interface EditOKRModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  okr: OKRData | null;
-  onOKRUpdated: (updatedOKR: OKRData) => void;
+  okr: OKR | null;
+  onOKRUpdated: (updatedOKR: OKR) => void;
 }
 
 export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRModalProps) {
+  const { toast } = useToast();
+  const [keyResults, setKeyResults] = useState<KeyResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Estados locais para os campos do formulário
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [owner, setOwner] = useState("");
-  const [deadline, setDeadline] = useState("");
-  const [keyResults, setKeyResults] = useState<KeyResult[]>([]);
-  const { toast } = useToast();
+  const [responsible, setResponsible] = useState("");
+  const [dueDate, setDueDate] = useState("");
 
   useEffect(() => {
     if (okr) {
       setTitle(okr.title);
-      setDescription(okr.description);
-      setOwner(okr.owner);
-      setDeadline(okr.deadline);
-      setKeyResults([...okr.keyResults]);
+      setDescription(okr.description || "");
+      setResponsible(okr.responsible);
+
+      // CORREÇÃO: Formata a data para YYYY-MM-DD para o input type="date"
+      const formattedDate = okr.due_date ? new Date(okr.due_date).toISOString().split('T')[0] : "";
+      setDueDate(formattedDate);
+      
+      setKeyResults(okr.keyResults || []);
     }
   }, [okr]);
 
@@ -59,10 +57,10 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
     const newKeyResult: KeyResult = {
       id: `kr-${Date.now()}`,
       title: "",
-      progress: 0,
       target: 100,
-      current: 0,
-      unit: "%"
+      current_value: 0,
+      unit: "%",
+      okr_id: okr!.id,
     };
     setKeyResults([...keyResults, newKeyResult]);
   };
@@ -73,16 +71,35 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
     ));
   };
 
-  const removeKeyResult = (id: string) => {
+  const removeKeyResult = async (id: string) => {
+    // Se o KR já existe no backend, exclua-o
+    if (!id.startsWith('kr-') && !id.startsWith('temp-')) {
+      try {
+        await deleteKeyResult(id);
+        toast({
+            title: "Resultado-Chave removido",
+            description: "O KR foi removido com sucesso.",
+        });
+      } catch (err: any) {
+        toast({
+          title: "Erro ao remover KR",
+          description: err.message,
+          variant: "destructive"
+        });
+        return;
+      }
+    }
     setKeyResults(prev => prev.filter(kr => kr.id !== id));
   };
-
-  const calculateProgress = (current: number, target: number) => {
-    return target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
+  
+  const calculateProgress = (currentValue: number, target: number) => {
+    return target > 0 ? Math.min(Math.round((currentValue / target) * 100), 100) : 0;
   };
-
-  const handleSubmit = () => {
-    if (!title.trim() || !description.trim() || !owner.trim() || !deadline.trim()) {
+  
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!title.trim() || !responsible.trim() || !dueDate.trim()) {
       toast({
         title: "Erro",
         description: "Por favor, preencha todos os campos obrigatórios.",
@@ -90,7 +107,7 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
       });
       return;
     }
-
+    
     if (keyResults.length === 0) {
       toast({
         title: "Erro", 
@@ -99,34 +116,60 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
       });
       return;
     }
-
-    const updatedKeyResults = keyResults.map(kr => ({
-      ...kr,
-      progress: calculateProgress(kr.current, kr.target)
-    }));
-
-    const overallProgress = updatedKeyResults.length > 0 
-      ? Math.round(updatedKeyResults.reduce((sum, kr) => sum + kr.progress, 0) / updatedKeyResults.length)
-      : 0;
-
-    const updatedOKR: OKRData = {
-      ...okr!,
-      title: title.trim(),
-      description: description.trim(),
-      owner: owner.trim(),
-      deadline: deadline.trim(),
-      keyResults: updatedKeyResults,
-      progress: overallProgress,
-      lastUpdate: "agora"
-    };
-
-    onOKRUpdated(updatedOKR);
-    onOpenChange(false);
     
-    toast({
-      title: "OKR atualizado",
-      description: "O OKR foi atualizado com sucesso.",
-    });
+    setIsLoading(true);
+    
+    try {
+      const okrPayload: OKRPayload = {
+        title: title.trim(),
+        description: description.trim(),
+        responsible: responsible.trim(),
+        due_date: dueDate,
+      };
+      
+      const updatedOKRData = await updateOKR(okr!.id, okrPayload);
+      
+      const updatedKeyResults = await Promise.all(
+        keyResults.map(async kr => {
+          const krPayload: KeyResultPayload = {
+            title: kr.title,
+            target: kr.target,
+            unit: kr.unit,
+            current_value: kr.current_value,
+          };
+          if (kr.id.startsWith('kr-') || kr.id.startsWith('temp-')) {
+            return await createKeyResult(updatedOKRData.id, krPayload);
+          } else {
+            return await apiUpdateKeyResult(kr.id, krPayload);
+          }
+        })
+      );
+      
+      const finalUpdatedOKR: OKR = {
+        ...okr!,
+        ...updatedOKRData,
+        keyResults: updatedKeyResults,
+        comments: okr!.comments,
+      };
+      
+      onOKRUpdated(finalUpdatedOKR);
+      
+      toast({
+        title: "OKR atualizada com sucesso!",
+        description: `"${finalUpdatedOKR.title}" foi atualizada.`,
+      });
+
+      onOpenChange(false);
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: "Erro ao atualizar OKR",
+        description: err.message || "Tente novamente mais tarde.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!okr) return null;
@@ -141,8 +184,7 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Basic Information */}
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="title">Título do Objetivo *</Label>
@@ -151,16 +193,18 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Ex: Aumentar satisfação do cliente"
+                required
               />
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="owner">Responsável *</Label>
+              <Label htmlFor="responsible">Responsável *</Label>
               <Input
-                id="owner"
-                value={owner}
-                onChange={(e) => setOwner(e.target.value)}
+                id="responsible"
+                value={responsible}
+                onChange={(e) => setResponsible(e.target.value)}
                 placeholder="Nome do responsável"
+                required
               />
             </div>
           </div>
@@ -173,20 +217,21 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Descreva o objetivo e como ele será alcançado..."
               className="min-h-[100px]"
+              required
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="deadline">Prazo *</Label>
+            <Label htmlFor="due_date">Prazo *</Label>
             <Input
-              id="deadline"
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-              placeholder="Ex: 31 Dez, 2024"
+              id="due_date"
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              required
             />
           </div>
 
-          {/* Key Results */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
@@ -194,7 +239,7 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
                   <Target className="w-5 h-5 text-primary" />
                   Resultados-Chave
                 </span>
-                <Button onClick={addKeyResult} size="sm" variant="outline">
+                <Button onClick={addKeyResult} size="sm" variant="outline" type="button">
                   <Plus className="w-4 h-4 mr-2" />
                   Adicionar
                 </Button>
@@ -211,6 +256,7 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
                         size="sm"
                         variant="ghost"
                         className="text-destructive hover:text-destructive"
+                        type="button"
                       >
                         <X className="w-4 h-4" />
                       </Button>
@@ -229,8 +275,8 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
                         <Label>Valor Atual</Label>
                         <Input
                           type="number"
-                          value={kr.current}
-                          onChange={(e) => updateKeyResult(kr.id, "current", parseFloat(e.target.value) || 0)}
+                          value={kr.current_value}
+                          onChange={(e) => updateKeyResult(kr.id, "current_value", parseFloat(e.target.value) || 0)}
                         />
                       </div>
                       <div>
@@ -254,12 +300,12 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
                     <div className="mt-3">
                       <div className="flex justify-between text-sm mb-1">
                         <span>Progresso</span>
-                        <span>{calculateProgress(kr.current, kr.target)}%</span>
+                        <span>{calculateProgress(kr.current_value, kr.target)}%</span>
                       </div>
                       <div className="w-full bg-muted rounded-full h-2">
                         <div 
                           className="bg-primary h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${calculateProgress(kr.current, kr.target)}%` }}
+                          style={{ width: `${calculateProgress(kr.current_value, kr.target)}%` }}
                         />
                       </div>
                     </div>
@@ -276,17 +322,21 @@ export function EditOKRModal({ open, onOpenChange, okr, onOKRUpdated }: EditOKRM
               )}
             </CardContent>
           </Card>
-
-          {/* Actions */}
+          
           <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading} type="button">
               Cancelar
             </Button>
-            <Button onClick={handleSubmit} className="btn-hero">
-              Salvar Alterações
+            <Button type="submit" className="btn-hero" disabled={isLoading}>
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Salvando...
+                </div>
+              ) : "Salvar Alterações"}
             </Button>
           </div>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   );

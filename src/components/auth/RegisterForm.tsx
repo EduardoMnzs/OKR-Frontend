@@ -5,16 +5,63 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Target, ArrowLeft } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom"; // <<< Importe 'useNavigate'
+
+import { register, setAuthToken } from "@/services/authService"; // <<< Importe as funções de registro
+import { RegisterPayload } from "@/types/api"; // <<< Importe os tipos
 
 export function RegisterForm() {
+  const navigate = useNavigate(); // <<< Inicialize o useNavigate
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.id]: e.target.value
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement actual registration logic with Supabase
-    console.log("Register form submitted");
+    setError(null);
+    setLoading(true);
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("As senhas não coincidem.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const payload: RegisterPayload = {
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        email: formData.email,
+        password: formData.password,
+      };
+
+      const data = await register(payload);
+      setAuthToken(data.token);
+      console.log("Registro bem-sucedido!", data.user);
+      
+      // Redireciona para a página principal após o registro
+      navigate("/dashboard");
+    } catch (err: any) {
+      setError(err.message || "Ocorreu um erro no registro.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -32,6 +79,12 @@ export function RegisterForm() {
       </CardHeader>
       
       <CardContent className="space-y-6">
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative text-sm" role="alert">
+            <span className="block sm:inline">{error}</span>
+          </div>
+        )}
+        
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -41,6 +94,9 @@ export function RegisterForm() {
               <Input
                 id="firstName"
                 type="text"
+                name="firstName"
+                value={formData.firstName}
+                onChange={handleInputChange}
                 placeholder="Seu nome"
                 className="transition-all duration-200 focus:ring-2 focus:ring-primary/20"
                 required
@@ -53,6 +109,9 @@ export function RegisterForm() {
               <Input
                 id="lastName"
                 type="text"
+                name="lastName"
+                value={formData.lastName}
+                onChange={handleInputChange}
                 placeholder="Seu sobrenome"
                 className="transition-all duration-200 focus:ring-2 focus:ring-primary/20"
                 required
@@ -67,6 +126,9 @@ export function RegisterForm() {
             <Input
               id="email"
               type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleInputChange}
               placeholder="seu@email.com"
               className="transition-all duration-200 focus:ring-2 focus:ring-primary/20"
               required
@@ -80,7 +142,10 @@ export function RegisterForm() {
             <div className="relative">
               <Input
                 id="password"
+                name="password"
                 type={showPassword ? "text" : "password"}
+                value={formData.password}
+                onChange={handleInputChange}
                 placeholder="Digite sua senha"
                 className="pr-10 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
                 required
@@ -108,7 +173,10 @@ export function RegisterForm() {
             <div className="relative">
               <Input
                 id="confirmPassword"
+                name="confirmPassword"
                 type={showConfirmPassword ? "text" : "password"}
+                value={formData.confirmPassword}
+                onChange={handleInputChange}
                 placeholder="Confirme sua senha"
                 className="pr-10 transition-all duration-200 focus:ring-2 focus:ring-primary/20"
                 required
@@ -132,8 +200,14 @@ export function RegisterForm() {
           <Button 
             type="submit" 
             className="w-full btn-hero h-11 text-base font-medium"
+            disabled={loading}
           >
-            Criar Conta
+            {loading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Criando conta...
+              </div>
+            ) : "Criar Conta"}
           </Button>
         </form>
 

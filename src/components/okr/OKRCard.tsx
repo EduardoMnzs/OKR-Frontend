@@ -34,28 +34,15 @@ import {
 import { CommentModal } from "./CommentModal";
 import { EditOKRModal } from "./EditOKRModal";
 
-interface KeyResult {
-  id: string;
-  title: string;
-  progress: number;
-  target: number;
-  current: number;
-  unit: string;
-}
+import { useToast } from "@/hooks/use-toast";
+import type { OKR } from "@/types/okr.d.ts";
 
-interface OKRCardProps {
-  id: string;
-  title: string;
-  description: string;
-  owner: string;
-  deadline: string;
-  status: "on-track" | "at-risk" | "behind" | "completed";
-  progress: number;
-  keyResults: KeyResult[];
-  lastUpdate: string;
-  commentsCount: number;
-  onOKRUpdated?: (updatedOKR: OKRCardProps) => void;
+// REMOVA AS INTERFACES LOCAIS QUE CAUSAVAM CONFLITO
+// A interface 'OKRCardProps' agora estende a 'OKR' centralizada
+export interface OKRCardProps extends OKR {
+  onOKRUpdated?: (updatedOKR: OKR) => void;
   onOKRDeleted?: (id: string) => void;
+  isDeleting?: boolean; // Adicionado para resolver o erro
 }
 
 const statusConfig = {
@@ -93,21 +80,38 @@ export function OKRCard({
   id,
   title,
   description,
-  owner,
-  deadline,
+  responsible, // Agora é "responsible"
+  due_date, // Agora é "due_date"
   status,
-  progress,
   keyResults,
-  lastUpdate,
-  commentsCount,
+  comments,
+  updatedAt,
   onOKRUpdated,
-  onOKRDeleted
+  onOKRDeleted,
+  isDeleting = false // Adicione este prop para o estado de exclusão
 }: OKRCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [commentModalOpen, setCommentModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { toast } = useToast();
   const statusInfo = statusConfig[status];
+
+  const calculateProgress = () => {
+    if (!keyResults || keyResults.length === 0) return 0;
+    const totalProgress = keyResults.reduce((sum, kr) => sum + (kr.current_value / kr.target) * 100, 0);
+    return Math.round(totalProgress / keyResults.length);
+  };
+
+  const progress = calculateProgress();
+  const commentsCount = comments?.length || 0;
+
+  const handleDeleteAction = () => {
+    if (onOKRDeleted) {
+      onOKRDeleted(id);
+    }
+    setDeleteDialogOpen(false);
+  };
 
   return (
     <Card className="card-okr group">
@@ -159,19 +163,19 @@ export function OKRCard({
         </div>
 
         <div className="flex items-center gap-4 mt-4">
-          <Badge variant={statusInfo.variant} className={`text-xs ${statusInfo.bgColor} ${statusInfo.textColor} border-0`}>
-            <div className={`w-2 h-2 rounded-full ${statusInfo.color} mr-2`}></div>
-            {statusInfo.text}
+          <Badge variant={statusConfig[status].variant} className={`text-xs ${statusConfig[status].bgColor} ${statusConfig[status].textColor} border-0`}>
+            <div className={`w-2 h-2 rounded-full ${statusConfig[status].color} mr-2`}></div>
+            {statusConfig[status].text}
           </Badge>
           
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <User className="w-3 h-3" />
-            {owner}
+            {responsible}
           </div>
           
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Calendar className="w-3 h-3" />
-            {deadline}
+            {new Date(due_date).toLocaleDateString()}
           </div>
         </div>
       </CardHeader>
@@ -192,23 +196,27 @@ export function OKRCard({
             onClick={() => setIsExpanded(!isExpanded)}
             className="flex items-center justify-between w-full text-sm font-medium hover:text-primary transition-colors"
           >
-            <span>Resultados-Chave ({keyResults.length})</span>
+            <span>Resultados-Chave ({keyResults?.length || 0})</span>
             <TrendingUp className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
           </button>
           
           {isExpanded && (
             <div className="space-y-3 animate-fade-in-up">
-              {keyResults.map((kr) => (
-                <div key={kr.id} className="p-3 bg-muted/30 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-medium line-clamp-1">{kr.title}</h4>
-                    <span className="text-xs text-muted-foreground">
-                      {kr.current}/{kr.target} {kr.unit}
-                    </span>
+              {keyResults?.length > 0 ? (
+                keyResults.map((kr) => (
+                  <div key={kr.id} className="p-3 bg-muted/30 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-medium line-clamp-1">{kr.title}</h4>
+                      <span className="text-xs text-muted-foreground">
+                        {kr.current_value}/{kr.target} {kr.unit}
+                      </span>
+                    </div>
+                    <Progress value={Math.round((kr.current_value / kr.target) * 100)} className="h-1.5" />
                   </div>
-                  <Progress value={kr.progress} className="h-1.5" />
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center italic">Nenhum resultado-chave adicionado.</p>
+              )}
             </div>
           )}
         </div>
@@ -217,7 +225,7 @@ export function OKRCard({
         <div className="flex items-center justify-between pt-2 border-t border-border/50">
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Clock className="w-3 h-3" />
-            Atualizado {lastUpdate}
+            Atualizado {new Date(updatedAt).toLocaleString()}
           </div>
           
           {commentsCount > 0 && (
@@ -244,13 +252,14 @@ export function OKRCard({
           id,
           title,
           description,
-          owner,
-          deadline,
+          responsible,
+          due_date,
           status,
-          progress,
+          user_id: "",
+          createdAt: "",
+          updatedAt,
           keyResults,
-          lastUpdate,
-          commentsCount
+          comments,
         }}
         onOKRUpdated={onOKRUpdated}
       />
@@ -264,12 +273,13 @@ export function OKRCard({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
             <AlertDialogAction 
-              onClick={() => onOKRDeleted?.(id)}
+              onClick={handleDeleteAction}
+              disabled={isDeleting}
               className="bg-destructive hover:bg-destructive/90"
             >
-              Excluir
+              {isDeleting ? 'Excluindo...' : 'Excluir'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

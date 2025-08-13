@@ -9,30 +9,30 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, X, Target } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-interface KeyResult {
-  title: string;
-  target: number;
-  unit: string;
+// REMOVA AS INTERFACES LOCAIS E IMPORTE AS INTERFACES CENTRALIZADAS
+import { OKR, KeyResult } from "@/types/okr";
+import { createOKR, createKeyResult, OKRPayload, KeyResultPayload } from "@/services/okrService";
+
+// Adapte as interfaces para usar as interfaces centrais
+export interface CreateOKRModalProps {
+  children: React.ReactNode;
+  onOKRCreated?: (okr: OKR) => void;
 }
 
+// O tipo do formulário do react-hook-form
 interface OKRFormData {
   title: string;
   description: string;
-  owner: string;
-  deadline: string;
-  keyResults: KeyResult[];
-}
-
-interface CreateOKRModalProps {
-  children: React.ReactNode;
-  onOKRCreated?: (okr: any) => void;
+  owner: string; // no backend é 'responsible'
+  deadline: string; // no backend é 'due_date'
 }
 
 export function CreateOKRModal({ children, onOKRCreated }: CreateOKRModalProps) {
   const [open, setOpen] = useState(false);
   const [keyResults, setKeyResults] = useState<KeyResult[]>([
-    { title: "", target: 0, unit: "" }
+    { id: `temp-${Date.now()}`, title: "", target: 0, unit: "", current_value: 0, okr_id: "" }
   ]);
+  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   const {
@@ -40,20 +40,17 @@ export function CreateOKRModal({ children, onOKRCreated }: CreateOKRModalProps) 
     handleSubmit,
     reset,
     formState: { errors },
-    setValue,
-    watch
   } = useForm<OKRFormData>({
     defaultValues: {
       title: "",
       description: "",
       owner: "",
-      deadline: "",
-      keyResults: []
+      deadline: ""
     }
   });
 
   const addKeyResult = () => {
-    setKeyResults([...keyResults, { title: "", target: 0, unit: "" }]);
+    setKeyResults([...keyResults, { id: `temp-${Date.now()}`, title: "", target: 0, unit: "", current_value: 0, okr_id: "" }]);
   };
 
   const removeKeyResult = (index: number) => {
@@ -63,48 +60,69 @@ export function CreateOKRModal({ children, onOKRCreated }: CreateOKRModalProps) 
   };
 
   const updateKeyResult = (index: number, field: keyof KeyResult, value: string | number) => {
-    const updated = keyResults.map((kr, i) => 
+    const updated = keyResults.map((kr, i) =>
       i === index ? { ...kr, [field]: value } : kr
     );
     setKeyResults(updated);
   };
 
-  const onSubmit = (data: OKRFormData) => {
-    const newOKR = {
-      id: Math.random().toString(),
-      title: data.title,
-      description: data.description,
-      owner: data.owner,
-      deadline: new Date(data.deadline).toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-      }),
-      status: "on-track" as const,
-      progress: 0,
-      lastUpdate: "agora",
-      commentsCount: 0,
-      keyResults: keyResults.map((kr, index) => ({
-        id: `kr${Math.random()}`,
-        title: kr.title,
-        progress: 0,
-        target: kr.target,
-        current: 0,
-        unit: kr.unit
-      }))
-    };
+  const onSubmit = async (data: OKRFormData) => {
+    setIsLoading(true);
 
-    onOKRCreated?.(newOKR);
-    
-    toast({
-      title: "OKR criada com sucesso!",
-      description: `"${data.title}" foi adicionada aos seus objetivos.`,
-    });
+    try {
+      // 1. Cria a OKR no backend
+      const okrPayload: OKRPayload = {
+        title: data.title,
+        description: data.description,
+        responsible: data.owner,
+        due_date: data.deadline,
+      };
 
-    // Reset form and close modal
-    reset();
-    setKeyResults([{ title: "", target: 0, unit: "" }]);
-    setOpen(false);
+      const createdOKR = await createOKR(okrPayload);
+
+      // 2. Cria os Key Results, associando-os à OKR recém-criada
+      const newKeyResults = [];
+      for (const kr of keyResults) {
+        if (kr.title && kr.target && kr.unit) {
+          const keyResultPayload: KeyResultPayload = {
+            title: kr.title,
+            target: kr.target,
+            unit: kr.unit,
+            current_value: 0 
+          };
+          const newKr = await createKeyResult(createdOKR.id, keyResultPayload);
+          newKeyResults.push(newKr);
+        }
+      }
+
+      const finalCreatedOKR: OKR = {
+        ...createdOKR,
+        keyResults: newKeyResults,
+        comments: []
+      };
+
+      // 3. Sucesso: notifica e reseta o formulário
+      toast({
+        title: "OKR criada com sucesso!",
+        description: `"${finalCreatedOKR.title}" foi adicionada aos seus objetivos.`,
+      });
+
+      onOKRCreated?.(finalCreatedOKR);
+
+      reset();
+      setKeyResults([{ id: `temp-${Date.now()}`, title: "", target: 0, unit: "", current_value: 0, okr_id: "" }]);
+      setOpen(false);
+
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: "Erro ao criar OKR",
+        description: err.message || "Tente novamente mais tarde.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -240,11 +258,21 @@ export function CreateOKRModal({ children, onOKRCreated }: CreateOKRModalProps) 
 
           {/* Actions */}
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => setOpen(false)}
+              disabled={isLoading}
+            >
               Cancelar
             </Button>
-            <Button type="submit" className="btn-hero">
-              Criar OKR
+            <Button type="submit" className="btn-hero" disabled={isLoading}>
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Criando...
+                </div>
+              ) : "Criar OKR"}
             </Button>
           </div>
         </form>

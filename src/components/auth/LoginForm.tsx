@@ -5,7 +5,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EyeOpenIcon, EyeClosedIcon } from "@radix-ui/react-icons";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+
+import { login, setAuthToken } from "@/services/authService";
+import { LoginPayload } from "@/types/api";
 
 export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
@@ -15,20 +18,40 @@ export function LoginForm() {
     password: "",
   });
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate authentication
-    setTimeout(() => {
+    try {
+      const payload: LoginPayload = {
+        email: formData.email,
+        password: formData.password
+      };
+      
+      const response = await login(payload);
+      setAuthToken(response.token);
+      
       toast({
         title: "Login Realizado com Sucesso",
         description: "Bem-vindo ao seu Painel de OKRs!",
       });
+
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 1500);
+
+    } catch (err: any) {
+      toast({
+        title: "Erro no Login",
+        description: err.message,
+        variant: "destructive"
+      });
+      console.error(err);
+    } finally {
       setIsLoading(false);
-      // Here you would redirect to dashboard
-    }, 1500);
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
