@@ -3,6 +3,7 @@ export interface User {
   email: string;
   createdAt: string;
   updatedAt: string;
+  profile?: Profile;
 }
 
 export interface AuthResponse {

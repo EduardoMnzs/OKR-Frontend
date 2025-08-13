@@ -7,7 +7,7 @@ import {
   Target, 
   Calendar, 
   User, 
-  TrendingUp, 
+  ChevronUp, 
   MoreHorizontal,
   Edit3,
   MessageCircle,
@@ -197,7 +197,7 @@ export function OKRCard({
             className="flex items-center justify-between w-full text-sm font-medium hover:text-primary transition-colors"
           >
             <span>Resultados-Chave ({keyResults?.length || 0})</span>
-            <TrendingUp className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+            <ChevronUp className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
           </button>
           
           {isExpanded && (

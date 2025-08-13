@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Target, ArrowLeft } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom"; // <<< Importe 'useNavigate'
 
-import { register, setAuthToken } from "@/services/authService"; // <<< Importe as funções de registro
+import { register, setAuthData } from "@/services/authService"; // <<< Importe as funções de registro
 import { RegisterPayload } from "@/types/api"; // <<< Importe os tipos
 
 export function RegisterForm() {
@@ -51,7 +51,7 @@ export function RegisterForm() {
       };
 
       const data = await register(payload);
-      setAuthToken(data.token);
+      setAuthData(data.token, data.user.profile?.first_name || "");
       console.log("Registro bem-sucedido!", data.user);
       
       // Redireciona para a página principal após o registro

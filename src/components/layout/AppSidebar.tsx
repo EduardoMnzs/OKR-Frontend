@@ -5,7 +5,7 @@ import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGrou
 import { Button } from "@/components/ui/button";
 import { CreateOKRModal } from "@/components/okr/CreateOKRModal";
 
-import { removeAuthToken } from "@/services/authService";
+import { removeAuthData } from "@/services/authService";
 
 const menuItems = [{
   title: "Home",
@@ -22,7 +22,7 @@ export function AppSidebar() {
   const isActive = (path: string) => currentPath === path;
 
   const handleLogout = () => {
-    removeAuthToken();
+    removeAuthData();
     navigate("/login");
   };
 

@@ -7,7 +7,7 @@ import { EyeOpenIcon, EyeClosedIcon } from "@radix-ui/react-icons";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 
-import { login, setAuthToken } from "@/services/authService";
+import { login, setAuthData } from "@/services/authService";
 import { LoginPayload } from "@/types/api";
 
 export function LoginForm() {
@@ -31,8 +31,8 @@ export function LoginForm() {
       };
       
       const response = await login(payload);
-      setAuthToken(response.token);
-      
+      setAuthData(response.token, response.user.profile?.first_name || "");
+
       toast({
         title: "Login Realizado com Sucesso",
         description: "Bem-vindo ao seu Painel de OKRs!",

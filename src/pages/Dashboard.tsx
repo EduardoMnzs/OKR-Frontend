@@ -10,10 +10,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { OKR } from "@/types/okr.d.ts";
 import { getOkrs, deleteOKR } from "@/services/okrService";
 import { useToast } from "@/hooks/use-toast";
+import { getUserFirstName } from "@/services/authService";
 
 const Dashboard = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const firstName = getUserFirstName() || "usuário";
   
   const [filters, setFilters] = useState<FilterState>({
     search: "",
@@ -153,7 +155,7 @@ const Dashboard = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            Bem-vindo de volta, Alex!
+            Bem-vindo de volta, {firstName}!
           </h1>
           <p className="text-muted-foreground mt-1">
             Vamos fazer progresso em suas metas hoje.
