@@ -7,28 +7,37 @@ import {
 
 const API_BASE_URL = `${import.meta.env.VITE_API_URL}`;
 
-// Nova função para salvar token e nome do usuário
-export const setAuthData = (token: string, firstName: string) => {
-  localStorage.setItem('authToken', token);
-  localStorage.setItem('userFirstName', firstName);
+export interface AuthData {
+  token: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+}
+
+export const setAuthData = (data: AuthData) => {
+  localStorage.setItem('authData', JSON.stringify(data));
 };
 
-// Nova função para buscar o primeiro nome do usuário
-export const getUserFirstName = (): string | null => {
-  return localStorage.getItem('userFirstName');
+export const getAuthData = (): AuthData => {
+  const data = localStorage.getItem('authData');
+  if (data) {
+    return JSON.parse(data);
+  }
+  return { token: null, firstName: null, lastName: null, email: null };
 };
 
-// Funções para gerenciar o token
 export const getAuthToken = (): string | null => {
-  return localStorage.getItem('authToken');
+  return getAuthData().token;
+};
+
+export const getUserFirstName = (): string | null => {
+  return getAuthData().firstName;
 };
 
 export const removeAuthData = () => {
-  localStorage.removeItem('authToken');
-  localStorage.removeItem('userFirstName');
+  localStorage.removeItem('authData');
 };
 
-// Função para registrar
 export const register = async (payload: RegisterPayload): Promise<AuthResponse> => {
   const response = await fetch(`${API_BASE_URL}/auth/register`, {
     method: 'POST',
@@ -45,15 +54,16 @@ export const register = async (payload: RegisterPayload): Promise<AuthResponse> 
 
   const data: AuthResponse = await response.json();
   
-  // Salva o token e o primeiro nome após o registro
-  if (data.user.profile?.first_name) {
-    setAuthData(data.token, data.user.profile.first_name);
-  }
+  setAuthData({
+    token: data.token,
+    firstName: data.user.profile?.first_name || null,
+    lastName: data.user.profile?.last_name || null,
+    email: data.user.email || null,
+  });
 
   return data;
 };
 
-// Função para fazer login
 export const login = async (payload: LoginPayload): Promise<AuthResponse> => {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
@@ -70,10 +80,12 @@ export const login = async (payload: LoginPayload): Promise<AuthResponse> => {
 
   const data: AuthResponse = await response.json();
   
-  // Salva o token e o primeiro nome após o login
-  if (data.user.profile?.first_name) {
-    setAuthData(data.token, data.user.profile.first_name);
-  }
+  setAuthData({
+    token: data.token,
+    firstName: data.user.profile?.first_name || null,
+    lastName: data.user.profile?.last_name || null,
+    email: data.user.email || null,
+  });
 
   return data;
 };

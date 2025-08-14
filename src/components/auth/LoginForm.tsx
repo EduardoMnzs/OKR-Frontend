@@ -31,7 +31,12 @@ export function LoginForm() {
       };
       
       const response = await login(payload);
-      setAuthData(response.token, response.user.profile?.first_name || "");
+      setAuthData({
+        token: response.token,
+        firstName: response.user.profile?.first_name || null,
+        lastName: response.user.profile?.last_name || null,
+        email: response.user.email || ""
+      });
 
       toast({
         title: "Login Realizado com Sucesso",

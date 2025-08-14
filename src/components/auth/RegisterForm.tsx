@@ -51,10 +51,14 @@ export function RegisterForm() {
       };
 
       const data = await register(payload);
-      setAuthData(data.token, data.user.profile?.first_name || "");
+      setAuthData({
+        token: data.token,
+        firstName: data.user.profile?.first_name || null,
+        lastName: data.user.profile?.last_name || null,
+        email: data.user.email || ""
+      });
       console.log("Registro bem-sucedido!", data.user);
       
-      // Redireciona para a página principal após o registro
       navigate("/dashboard");
     } catch (err: any) {
       setError(err.message || "Ocorreu um erro no registro.");
