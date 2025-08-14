@@ -59,7 +59,7 @@ export function RegisterForm() {
       });
       console.log("Registro bem-sucedido!", data.user);
       
-      navigate("/dashboard");
+      navigate("/");
     } catch (err: any) {
       setError(err.message || "Ocorreu um erro no registro.");
       console.error(err);

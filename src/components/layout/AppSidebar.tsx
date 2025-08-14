@@ -9,7 +9,7 @@ import { removeAuthData } from "@/services/authService";
 
 const menuItems = [{
   title: "Home",
-  url: "/dashboard",
+  url: "/",
   icon: Home
 }];
 

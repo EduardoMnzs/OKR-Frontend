@@ -21,13 +21,12 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           {/* Rotas públicas */}
-          <Route path="/" element={<Login />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           
           {/* Rota protegida */}
           <Route 
-            path="/dashboard" 
+            path="/" 
             element={
               <ProtectedRoute> {/* <<< Protege a rota */}
                 <DashboardLayout>

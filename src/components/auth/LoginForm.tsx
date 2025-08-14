@@ -44,7 +44,7 @@ export function LoginForm() {
       });
 
       setTimeout(() => {
-        navigate("/dashboard");
+        navigate("/");
       }, 1500);
 
     } catch (err: any) {
